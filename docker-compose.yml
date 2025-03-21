@@ -1,0 +1,14 @@
+services:
+  api:
+    container_name: gd-api
+    build:
+      dockerfile: Dockerfile.development
+      args:
+        uid: 1000
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 8000:80
+    volumes:
+      - .:/var/www/html
+      - ./vendor:/var/www/html/vendor

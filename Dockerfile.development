@@ -1,0 +1,66 @@
+FROM ubuntu:20.04
+
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository ppa:ondrej/php && \
+    apt-get update && \
+    apt install php8.4 -y
+
+RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y \
+    nginx \
+    php8.4-dom \
+    php8.4-xml \
+    php8.4-mbstring \
+    php8.4-tokenizer \
+    php8.4-fpm \
+    php8.4-bcmath \
+    php8.4-bz2 \
+    php8.4-opcache \
+    php8.4-curl \
+    php8.4-gd \
+    php8.4-dom \
+    php8.4-simplexml \
+    php8.4-soap \
+    php8.4-zip \
+    php8.4-xml \
+    php8.4-xdebug \
+    php8.4-sqlite3 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+COPY --from=composer /usr/bin/composer /usr/bin/composer
+
+RUN sed -i 's/;listen.mode = 0660/listen.mode = 0666/' /etc/php/8.4/fpm/pool.d/www.conf
+
+RUN echo "xdebug.mode=develop,debug,coverage" >> /etc/php/8.4/mods-available/xdebug.ini \
+    && echo "xdebug.discover_client_host=0" >> /etc/php/8.4/mods-available/xdebug.ini \
+    && echo "xdebug.client_host=host.docker.internal" >> /etc/php/8.4/mods-available/xdebug.ini \
+    && echo "xdebug.start_with_request=yes" >> /etc/php/8.4/mods-available/xdebug.ini \
+    && echo "xdebug.client_port=9005" >> /etc/php/8.4/mods-available/xdebug.ini 
+
+COPY docker/nginx/nginx.conf /etc/nginx/sites-available/default
+
+WORKDIR /var/www/html
+
+COPY . .
+
+RUN composer config --global process-timeout 600
+
+RUN composer i
+
+RUN chmod -R 775 ./
+RUN chmod o+w ./storage/ -R
+RUN chmod -R 775 ./bootstrap/cache
+RUN chown -R www-data:www-data .
+RUN chown -R $USER:www-data ./storage
+RUN chown -R $USER:www-data ./bootstrap/cache
+RUN chmod +x ./artisan
+
+RUN php artisan route:list
+RUN php artisan optimize
+RUN chmod o+w database/database.sqlite
+RUN php artisan migrate
+
+RUN chmod +x docker/entrypoint.sh
+EXPOSE 80
+
+ENTRYPOINT ["docker/entrypoint.sh"]
